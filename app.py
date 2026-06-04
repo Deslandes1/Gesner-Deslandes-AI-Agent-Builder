@@ -198,7 +198,7 @@ with st.sidebar:
         
     st.header("⚙️ Agent Settings")
     temperature = st.sidebar.slider("Agent Temperature (Creativity vs Determinism)", 0.0, 1.0, 0.1, step=0.05)
-    model_name = st.sidebar.selectbox("LLM Core Engine:", ["llama3-8b-8192", "mixtral-8x7b-32768"])
+    model_name = st.sidebar.selectbox("LLM Core Engine:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"])
     
     st.markdown("---")
     st.markdown("### 👨‍💻 Creator profile")
