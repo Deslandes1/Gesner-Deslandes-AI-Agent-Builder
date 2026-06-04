@@ -11,7 +11,37 @@ def tool_imagen_generator(prompt):
 
 def tool_generate_talking_video(image_url, script):
     """
-    ARCHITECTURE STUB: Integration for Video Rendering APIs.
+    Koneksyon reyèl ak API Replicate pou SadTalker.
+    """
+    import requests
+    import os
+
+    api_token = st.secrets.get("REPLICATE_API_TOKEN")
+    if not api_token:
+        return "VIDEO_ERROR: REPLICATE_API_TOKEN manke nan secrets."
+
+    # Voye demann lan bay API Replicate
+    headers = {"Authorization": f"Token {api_token}"}
+    payload = {
+        "input": {
+            "source_image": image_url,
+            "driven_audio": script, # Nòt: Nan yon ka reyèl, script la dwe yon fichye odyo (.wav)
+        }
+    }
+    
+    # Kòd pou lanse render videyo a
+    response = requests.post(
+        "https://api.replicate.com/v1/models/deforum/sadtalker/predictions",
+        headers=headers,
+        json=payload
+    )
+    
+    if response.status_code == 201:
+        prediction = response.json()
+        return f"VIDEO_RENDERING_STARTED: {prediction['urls']['get']}"
+    else:
+        return f"VIDEO_ERROR: {response.text}"
+
     To use this for real, register for a service like Replicate, HeyGen, or D-ID.
     """
     # This currently simulates the video generation rendering phase.
