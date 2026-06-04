@@ -483,11 +483,28 @@ if run_agent:
                 final_output_json = json.loads(final_response.choices[0].message.content)
                 
                 st.markdown('<div class="agent-card">', unsafe_allow_html=True)
-                st.markdown("### 🏆 Live Agent Final Answer Output")
-                st.success(final_output_json.get("final_answer", "Processing Completed Successfully."))
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-            except Exception as e:
+            st.markdown("### 🏆 Live Agent Final Answer Output")
+            final_answer_text = final_output_json.get("final_answer", "Processing Completed Successfully.")
+            st.success(final_answer_text)
+            
+            # Browser-Native TTS Injection
+            st.markdown(f"""
+            <button onclick="speakText('{final_answer_text.replace("'", "\\'")}')" 
+                    style="background-color: #8A2BE2; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px;">
+                🔊 Play Script Audio
+            </button>
+            <script>
+                function speakText(text) {{
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'en-US'; // Defaulting to English, can be dynamic
+                    window.speechSynthesis.speak(utterance);
+                }}
+            </script>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        except Exception as e:
                 st.error(f"Execution Error: {str(e)}")
 
 # Bottom Branding Footer
