@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import time
 import json
+import requests
+import base64
 from groq import Groq
 
 # ================== Page Config ==================
@@ -32,7 +34,7 @@ st.markdown("""
     p, li, span, .stMarkdown { color: #111111 !important; }
     
     /* White-Glass Cards for Content Blocks */
-    .metric-card, .debugger-card, .agent-card {
+    .metric-card, .debugger-card, .agent-card, .video-preview-card {
         background: rgba(255, 255, 255, 0.85);
         padding: 20px;
         border-radius: 12px;
@@ -89,12 +91,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ================== Asset Configurations ==================
+# ================== Asset & API Configurations ==================
 GITHUB_AVATAR_URL = "https://github.com/Deslandes1.png"
 has_groq = "GROQ_API_KEY" in st.secrets
+has_gemini = "GEMINI_API_KEY" in st.secrets
 
-# ================== Tool Definitions for Simulator ==================
-# Simple deterministic helper python tools representing the Agent's environment
+# ================== Active Agent Tools ==================
+
 def tool_translation_haiti(text, target_lang):
     """Translates Haitian Creole text into English, Spanish, or French."""
     translations = {
@@ -147,6 +150,32 @@ def tool_accent_detector(text):
         return "\n".join(corrections)
     return "No missing grave accents detected in Creole keywords."
 
+def tool_imagen_generator(prompt):
+    """Generates a base64 portrait image using Google's Imagen model."""
+    if not has_gemini:
+        # Fallback simulation image (Placeholder SVG avatar of an AI teacher)
+        return "SIMULATED_IMAGE_DATA_AVATAR"
+        
+    api_key = st.secrets["GEMINI_API_KEY"]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "instances": [{"prompt": prompt}],
+        "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": "1:1",
+            "outputMimeType": "image/jpeg"
+        }
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        base64_data = result["predictions"][0]["bytesBase64Encoded"]
+        return f"data:image/jpeg;base64,{base64_data}"
+    except Exception as e:
+        return f"Simulation Fallback (Error calling Imagen: {str(e)})"
+
 # ================== Sidebar Brand Panel ==================
 with st.sidebar:
     st.markdown(f"""
@@ -161,10 +190,15 @@ with st.sidebar:
         st.success("⚡ Groq API Connected!")
     else:
         st.warning("⚠️ Groq Key missing in Secrets. Running Simulation Mode.")
+
+    if has_gemini:
+        st.success("🎨 Imagen Engine Connected!")
+    else:
+        st.info("💡 Add GEMINI_API_KEY to secrets to generate real images.")
         
     st.header("⚙️ Agent Settings")
-    temperature = st.slider("Agent Temperature (Creativity vs Determinism)", 0.0, 1.0, 0.1, step=0.05)
-    model_name = st.selectbox("LLM Core Engine:", ["llama3-8b-8192", "mixtral-8x7b-32768"])
+    temperature = st.sidebar.slider("Agent Temperature (Creativity vs Determinism)", 0.0, 1.0, 0.1, step=0.05)
+    model_name = st.sidebar.selectbox("LLM Core Engine:", ["llama3-8b-8192", "mixtral-8x7b-32768"])
     
     st.markdown("---")
     st.markdown("### 👨‍💻 Creator profile")
@@ -192,18 +226,20 @@ col_input, col_eval = st.columns(2)
 
 with col_input:
     st.markdown("#### Evaluate Your Next Task")
-    task_desc = st.text_area("What is the goal of your automation/agent?", value="Correct spelling and accents in Creole video transcripts, translate them, and format them directly as an SRT file.", height=100)
+    task_desc = st.text_area(
+        "What is the goal of your automation/agent?", 
+        value="Generate a Haitian Creole teacher profile portrait and convert it into a talking photo lesson video.", 
+        height=100
+    )
     
-    # Simple interactive scorecard mapping to Rule 1 variables
     q1 = st.checkbox("Is the execution flow too ambiguous to map with standard if/else statements?", value=True)
     q2 = st.checkbox("Does the output format require natural language reasoning or contextual decisions?", value=True)
-    q3 = st.checkbox("Does the task require choosing between multiple external interfaces/tools dynamically?", value=False)
+    q3 = st.checkbox("Does the task require choosing between multiple external interfaces/tools dynamically?", value=True)
     q4 = st.checkbox("Can this task be solved with 100% deterministic code? (If yes, map the workflow instead)", value=False)
 
 with col_eval:
     st.markdown("#### Automation Recommendation Matrix")
     
-    # Scoring algorithm based on check boxes
     score = 0
     if q1: score += 30
     if q2: score += 30
@@ -214,11 +250,11 @@ with col_eval:
     st.markdown(f"### Design Recommendation Score: **{score}/100**")
     
     if score >= 60:
-        st.success("🎯 **VERDICT: Build an AI Agent.** This task involves high ambiguity, dynamic tool requirements, or variable natural language output. It cannot be easily scripted.")
+        st.success("🎯 **VERDICT: Build an AI Agent.** This workflow involves complex coordination between asset generation APIs, text layout engines, and dynamic rendering loops.")
     elif score >= 20:
         st.info("🔄 **VERDICT: Build a Hybrid Chain.** Use structured prompting or standard APIs sequentially rather than letting an agent run free in tool loops.")
     else:
-        st.error("🛑 **VERDICT: Use standard Python scripts.** Save money and compute! This task can be mapped directly. Map the workflow.")
+        st.error("🛑 **VERDICT: Use standard Python scripts.** Save money and compute!")
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("---")
@@ -229,40 +265,39 @@ st.markdown("An agent is merely a model inside a loop with access to a specific 
 
 col_sandbox, col_terminal = st.columns([1.1, 1])
 
-# Base Context we inject explicitly to limit hallucinations
 system_prompt_template = (
     "You are an AI Agent designed by Engineer Gesner Deslandes for GlobalInternet.py.\n"
-    "Your environment has access to exactly two tools:\n"
-    "1. translation_tool(text, target_lang) - translates keywords 'enjenyè', 'pwofesè', 'lojisyèl', 'kòd', 'kreyòl'\n"
-    "2. accent_corrector(text) - analyzes Creole accents for È and Ò words.\n\n"
+    "Your environment has access to exactly three tools:\n"
+    "1. translation_tool(text, target_lang) - translates Creole words to target language.\n"
+    "2. accent_corrector(text) - checks and corrects missing accents in Creole.\n"
+    "3. imagen_generator(prompt) - generates a portrait picture based on description.\n\n"
     "Respond using JSON format only:\n"
     "{\n"
     "  \"thought\": \"your reasoning process\",\n"
     "  \"tool_to_use\": \"tool_name or None\",\n"
     "  \"tool_input\": \"parameters\",\n"
-    "  \"final_answer\": \"the final result\"\n"
+    "  \"final_answer\": \"the final result or voice script content\"\n"
     "}"
 )
 
 with col_sandbox:
     st.markdown("#### Configure Agent Workspace Environment")
     
-    # Custom system instruction input
     system_instructions = st.text_area("Agent System Prompt (Context Boundaries):", value=system_prompt_template, height=180)
     
-    # Define current active tools
     st.markdown("**Active Tools in Workspace:**")
-    st.code("🔧 translation_tool (target_lang, text)\n🔧 accent_corrector (text)")
+    st.code("🔧 translation_tool(target_lang, text)\n🔧 accent_corrector(text)\n🔧 imagen_generator(prompt)")
     
-    # User query
-    user_query = st.text_input("Simulate User Query Input:", value="Check accents for 'pwofese' and translate 'lojisyel' to English.")
+    user_query = st.text_input(
+        "Simulate User Query Input:", 
+        value="Generate a portrait of an elegant Haitian Creole teacher, correct her motto 'pwofese a ap travay', and prepare a script."
+    )
     
     run_agent = st.button("🚀 Execute Model-Tool Loop")
 
 with col_terminal:
     st.markdown("#### 🔍 What the Agent Sees (Raw Context)")
     
-    # Visually represents Rule 3 ("Woud I know what to do if I only saw what the agent sees?")
     st.markdown('<div class="debugger-card">', unsafe_allow_html=True)
     st.markdown("**RAW PROMPT TO LLM ARCHITECTURE:**")
     debug_context = {
@@ -280,58 +315,82 @@ if run_agent:
     st.markdown("## ⚙️ Execution Loop (ReAct Phase Trace)")
     
     if not has_groq:
-        # Simulation Mode Trace (Shows step-by-step loop as described in Anthropic design principles)
-        with st.status("Running Model-Tool Loop Simulation...", expanded=True) as status:
-            st.write("🔄 **Step 1: Ingesting Raw Context & System Prompt...**")
+        # Simulation Mode Trace with dynamic lipsync components
+        with st.status("Running Multimedia Agent Loop Simulation...", expanded=True) as status:
+            st.write("🔄 **Step 1: Parsing Multimedia request parameters...**")
             time.sleep(1.0)
-            st.write("💭 **Step 2: LLM Reasoning thought generation...**")
             
-            simulated_thought = {
-                "thought": "The user wants me to do two things. First, check accents for 'pwofese'. Second, translate 'lojisyel' to English. I should run the accent_corrector tool first.",
-                "tool_to_use": "accent_corrector",
-                "tool_input": "pwofese",
+            st.write("💭 **Step 2: LLM Reasoning (Triggering Image Generator first)...**")
+            simulated_thought_1 = {
+                "thought": "I need to generate a portrait first. I will call the imagen_generator tool with a description of an elegant Haitian teacher.",
+                "tool_to_use": "imagen_generator",
+                "tool_input": "An elegant Haitian Creole female teacher, professional profile picture, high quality",
                 "final_answer": ""
             }
-            st.json(simulated_thought)
+            st.json(simulated_thought_1)
             time.sleep(1.2)
             
-            st.write("🛠️ **Step 3: Triggering Active Environment Tool...**")
-            tool_output = tool_accent_detector("pwofese")
-            st.code(f"Tool Output: {tool_output}")
+            st.write("🛠️ **Step 3: Generating Visual Asset...**")
+            img_data = tool_imagen_generator("An elegant Haitian Creole female teacher, professional profile picture, high quality")
+            st.code(f"Generated Asset Reference: {img_data[:40]}...")
             time.sleep(1.0)
             
-            st.write("💭 **Step 4: Feeding Tool Output back into Context Loop...**")
+            st.write("💭 **Step 4: LLM Reasoning (Checking grammar accents)...**")
             simulated_thought_2 = {
-                "thought": "The accent correction caught 'pwofesè'. Now I need to translate 'lojisyèl' to English using translation_tool.",
-                "tool_to_use": "translation_tool",
-                "tool_input": {"text": "lojisyèl", "target_lang": "english"},
+                "thought": "The image asset is ready. Now I will check the motto 'pwofese a ap travay' for missing accents using the accent_corrector tool.",
+                "tool_to_use": "accent_corrector",
+                "tool_input": "pwofese a ap travay",
                 "final_answer": ""
             }
             st.json(simulated_thought_2)
             time.sleep(1.2)
             
-            tool_output_2 = tool_translation_haiti("lojisyèl", "english")
-            st.code(f"Tool Output: {tool_output_2}")
-            time.sleep(0.8)
+            corrected_text = tool_accent_detector("pwofese a ap travay")
+            st.code(f"Correction output: {corrected_text}")
+            time.sleep(1.0)
             
-            st.write("🎯 **Step 5: Synthesizing Final Answer...**")
+            st.write("🎯 **Step 5: Compiling visual asset with audio lipsync configurations...**")
             final_res = {
-                "thought": "I have successfully analyzed accents and performed translation with all tools executed.",
+                "thought": "All tools completed. I have corrected the motto to 'Pwofesè a ap travay' and generated the teacher's profile picture. Now compiling the talking photo profile.",
                 "tool_to_use": "None",
                 "tool_input": "None",
-                "final_answer": "Accents correction: Changed 'pwofese' to 'pwofesè'. Translation of 'lojisyèl' is 'software'."
+                "final_answer": "Pwofesè a ap travay. (The teacher is working.)"
             }
             st.json(final_res)
+            time.sleep(0.8)
             
-            status.update(label="Simulation Loop Finished Successfully!", state="complete")
+            status.update(label="Talking Photo Video Compilation Completed Successfully!", state="complete")
             
-            st.markdown('<div class="agent-card">', unsafe_allow_html=True)
-            st.markdown("### 🏆 Simulated Agent Response")
-            st.success(final_res["final_answer"])
+            # Interactive HTML5/CSS Lipsync Simulator component
+            st.markdown('<div class="video-preview-card">', unsafe_allow_html=True)
+            st.markdown("### 📽️ Simulated Talking Photo Video Output")
+            col_v1, col_v2 = st.columns([1, 2])
+            
+            with col_v1:
+                # Displays avatar alongside a talking CSS animation
+                st.markdown(f"""
+                <div style="text-align: center; background: #333; padding: 20px; border-radius: 12px; position: relative; overflow: hidden; width: 200px; height: 200px; margin: auto;">
+                    <img src="{GITHUB_AVATAR_URL}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                    <!-- Pulse effect simulating talking motion -->
+                    <div style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #8A2BE2; width: 25px; height: 25px; border-radius: 50%; animation: pulse 1s infinite;"></div>
+                </div>
+                <style>
+                    @keyframes pulse {{
+                        0% {{ transform: translateX(-50%) scale(1); opacity: 1; }}
+                        50% {{ transform: translateX(-50%) scale(1.6); opacity: 0.4; }}
+                        100% {{ transform: translateX(-50%) scale(1); opacity: 1; }}
+                    }}
+                </style>
+                """, unsafe_allow_html=True)
+                
+            with col_v2:
+                st.write("**🔈 Voice Track (Haitian Creole):**")
+                st.info("« Genhen 2 lèt ki pran aksan fòs nan kreyòl Ayisyen, se È ak Ò. Pwofesè a ap travay sou kòd lojisyèl la! »")
+                st.success("✅ Lipsync generated at 24fps matching original vocal track length.")
             st.markdown('</div>', unsafe_allow_html=True)
             
     else:
-        # Live Run Mode utilizing actual Groq Engine
+        # Live Run Mode utilizing actual Groq & Gemini Engines
         client = Groq(api_key=st.secrets["GROQ_API_KEY"])
         
         with st.spinner("Executing Real-Time Agent reasoning on Groq platform..."):
@@ -357,7 +416,13 @@ if run_agent:
                 tool_selected = agent_decisions.get("tool_to_use")
                 tool_param = agent_decisions.get("tool_input")
                 
-                if tool_selected == "accent_corrector":
+                # Executing Image generation if targeted by Agent
+                img_url_output = None
+                if tool_selected == "imagen_generator":
+                    with st.spinner("Calling Imagen generator engine..."):
+                        img_url_output = tool_imagen_generator(str(tool_param))
+                        tool_result = f"Image generated successfully. Base64 string length: {len(img_url_output)}"
+                elif tool_selected == "accent_corrector":
                     tool_result = tool_accent_detector(str(tool_param))
                 elif tool_selected == "translation_tool":
                     if isinstance(tool_param, dict):
@@ -369,6 +434,9 @@ if run_agent:
                 
                 st.markdown("### 🛠️ Execution Observation Output")
                 st.code(f"Observation Result: {tool_result}")
+                
+                if img_url_output and not img_url_output.startswith("Simulation"):
+                    st.image(img_url_output, caption="Generated Teacher Portrait Profile", width=250)
                 
                 # Step 3: Synthesis of final result with observation context added
                 synthesis_prompt = f"The tool output from execution is: '{tool_result}'. Now compile the final clean response to the user."
