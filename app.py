@@ -461,7 +461,12 @@ if run_agent:
                     st.image(img_url_output, caption="Active Portrait Asset", width=250)
                 
                 # Step 3: Synthesis of final result with observation context added
-                synthesis_prompt = f"The tool output from execution is: '{tool_result}'. Now compile the final clean response to the user."
+                synthesis_prompt = (
+                    f"The tool output from execution is: '{tool_result}'. "
+                    "Now compile the final clean response to the user. "
+                    "CRITICAL: If the user requested a specific language in their original query, "
+                    "you MUST output the final_answer in that same language."
+                )
                 
                 final_response = client.chat.completions.create(
                     messages=[
