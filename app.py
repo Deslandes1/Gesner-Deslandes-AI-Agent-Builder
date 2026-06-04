@@ -288,6 +288,19 @@ with col_sandbox:
     st.markdown("**Active Tools in Workspace:**")
     st.code("🔧 translation_tool(target_lang, text)\n🔧 accent_corrector(text)\n🔧 imagen_generator(prompt)")
     
+    st.markdown("#### 🖼️ Image Resource Selection")
+    pic_source = st.radio("Portrait Image Source for Video:", ["Generate using AI Tool", "Upload My Own Picture"])
+    uploaded_pic_base64 = None
+    
+    if pic_source == "Upload My Own Picture":
+        uploaded_file = st.file_uploader("Upload a Portrait Picture (JPG/PNG)", type=["jpg", "png", "jpeg"])
+        if uploaded_file:
+            bytes_data = uploaded_file.getvalue()
+            uploaded_pic_base64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode()}"
+            st.image(uploaded_file, caption="🟢 Active Portrait Asset Loaded", width=150)
+    else:
+        st.info("💡 The agent will automatically trigger the 'imagen_generator' tool to create a portrait based on your description.")
+    
     user_query = st.text_input(
         "Simulate User Query Input:", 
         value="Generate a portrait of an elegant Haitian Creole teacher, correct her motto 'pwofese a ap travay', and prepare a script."
@@ -304,6 +317,7 @@ with col_terminal:
         "ROLE": "SYSTEM INSTRUCTIONS",
         "CONTEXT_PROMPT": system_instructions,
         "INPUT_QUERY": user_query,
+        "USER_UPLOADED_IMAGE_ASSET": uploaded_pic_base64[:60] + "..." if uploaded_pic_base64 else None,
         "BOUNDARIES": "Respond using JSON matching defined format. No other words outside JSON container."
     }
     st.json(debug_context)
@@ -320,20 +334,24 @@ if run_agent:
             st.write("🔄 **Step 1: Parsing Multimedia request parameters...**")
             time.sleep(1.0)
             
-            st.write("💭 **Step 2: LLM Reasoning (Triggering Image Generator first)...**")
-            simulated_thought_1 = {
-                "thought": "I need to generate a portrait first. I will call the imagen_generator tool with a description of an elegant Haitian teacher.",
-                "tool_to_use": "imagen_generator",
-                "tool_input": "An elegant Haitian Creole female teacher, professional profile picture, high quality",
-                "final_answer": ""
-            }
-            st.json(simulated_thought_1)
-            time.sleep(1.2)
-            
-            st.write("🛠️ **Step 3: Generating Visual Asset...**")
-            img_data = tool_imagen_generator("An elegant Haitian Creole female teacher, professional profile picture, high quality")
-            st.code(f"Generated Asset Reference: {img_data[:40]}...")
-            time.sleep(1.0)
+            st.write("💭 **Step 2: LLM Reasoning (Handling Image Resource selection)...**")
+            if pic_source == "Upload My Own Picture" and uploaded_pic_base64:
+                st.write("✅ **Detected custom user-uploaded picture. Bypassing AI generation tool.**")
+                img_data = uploaded_pic_base64
+            else:
+                simulated_thought_1 = {
+                    "thought": "I need to generate a portrait first. I will call the imagen_generator tool with a description of an elegant Haitian teacher.",
+                    "tool_to_use": "imagen_generator",
+                    "tool_input": "An elegant Haitian Creole female teacher, professional profile picture, high quality",
+                    "final_answer": ""
+                }
+                st.json(simulated_thought_1)
+                time.sleep(1.2)
+                
+                st.write("🛠️ **Step 3: Generating Visual Asset...**")
+                img_data = tool_imagen_generator("An elegant Haitian Creole female teacher, professional profile picture, high quality")
+                st.code(f"Generated Asset Reference: {img_data[:40]}...")
+                time.sleep(1.0)
             
             st.write("💭 **Step 4: LLM Reasoning (Checking grammar accents)...**")
             simulated_thought_2 = {
@@ -368,9 +386,10 @@ if run_agent:
             
             with col_v1:
                 # Displays avatar alongside a talking CSS animation
+                display_avatar = img_data if img_data else GITHUB_AVATAR_URL
                 st.markdown(f"""
                 <div style="text-align: center; background: #333; padding: 20px; border-radius: 12px; position: relative; overflow: hidden; width: 200px; height: 200px; margin: auto;">
-                    <img src="{GITHUB_AVATAR_URL}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                    <img src="{display_avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
                     <!-- Pulse effect simulating talking motion -->
                     <div style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: #8A2BE2; width: 25px; height: 25px; border-radius: 50%; animation: pulse 1s infinite;"></div>
                 </div>
@@ -418,7 +437,10 @@ if run_agent:
                 
                 # Executing Image generation if targeted by Agent
                 img_url_output = None
-                if tool_selected == "imagen_generator":
+                if pic_source == "Upload My Own Picture" and uploaded_pic_base64:
+                    img_url_output = uploaded_pic_base64
+                    tool_result = f"Custom user portrait uploaded. Asset loaded successfully. Length: {len(img_url_output)}"
+                elif tool_selected == "imagen_generator":
                     with st.spinner("Calling Imagen generator engine..."):
                         img_url_output = tool_imagen_generator(str(tool_param))
                         tool_result = f"Image generated successfully. Base64 string length: {len(img_url_output)}"
@@ -435,8 +457,8 @@ if run_agent:
                 st.markdown("### 🛠️ Execution Observation Output")
                 st.code(f"Observation Result: {tool_result}")
                 
-                if img_url_output and not img_url_output.startswith("Simulation"):
-                    st.image(img_url_output, caption="Generated Teacher Portrait Profile", width=250)
+                if img_url_output:
+                    st.image(img_url_output, caption="Active Portrait Asset", width=250)
                 
                 # Step 3: Synthesis of final result with observation context added
                 synthesis_prompt = f"The tool output from execution is: '{tool_result}'. Now compile the final clean response to the user."
